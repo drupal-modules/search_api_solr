@@ -6,17 +6,35 @@
  */
 
 /**
+ * Implements hook_menu().
+ */
+function search_api_solr_menu() {
+  return array(
+    'admin/config/search/search_api/server/%search_api_server/files' => array(
+      'title' => 'Files',
+      'description' => 'View server solr configuration files.',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('search_api_solr_solr_config_form', 5),
+      'access arguments' => array('administer search_api'),
+      'file' => 'search_api_solr.admin.inc',
+      'type' => MENU_LOCAL_TASK,
+      'weight' => -1,
+    ),
+  );
+}
+
+/**
  * Implements hook_search_api_service_info().
  */
 function search_api_solr_search_api_service_info() {
   $services['search_api_solr_service'] = array(
     'name' => t('Solr service'),
-    'description' => t('<p>Index items using an Apache Solr search server.</p>' .
-        '<ul>' . '<li>All field types are supported and indexed in a special way, with URI/String and Integer/Duration being equivalent.</li>' .
-        '<li>See <a href="@url">the Solr wiki</a> for information about the "direct" parse mode.</li>' .
-        '<li>Supports the search_api_facets and search_api_multi features.</li>' .
-        '<li>Will use internal Solr preprocessors, so Search API preprocessors should for the most part be deactivated.</li>' .
-        '<li>See the README.txt file provided with this module for details.</li>' . '</ul>',
+    'description' => t('<p>Index items using an Apache Solr search server.</p>
+        <ul><li>All field types are supported and indexed in a special way, with URI/String and Integer/Duration being equivalent.</li>
+        <li>See <a href="@url">the Solr wiki</a> for information about the "direct" parse mode.</li>
+        <li>Supports the search_api_facets and search_api_multi features.</li>
+        <li>Will use internal Solr preprocessors, so Search API preprocessors should for the most part be deactivated.</li>
+        <li>See the README.txt file provided with this module for details.</li></ul>',
         array('@url' => url('http://wiki.apache.org/solr/SolrQuerySyntax'))),
     'class' => 'SearchApiSolrService',
   );
@@ -91,4 +109,58 @@ function search_api_solr_search_api_server_update(SearchApiServer $server) {
   if ($server->class === 'search_api_solr_service') {
     $server->getSolrConnection()->clearCache();
   }
+}
+
+/**
+ * Retrieves content of the file when name has been specified or list of files.
+ *
+ * @param string $server_name
+ *   Name of the target SearchAPI server.
+ * @param string $file_name
+ *   Name of the file to retrieve or NULL for the list of files.
+ *
+ * @return mixed
+ *   Response object or NULL in case of error.
+ */
+function search_api_solr_server_get_file($server_name, $file_name = NULL) {
+
+  $server = search_api_server_load($server_name);
+
+  $get_single_file = $file_name !== NULL;
+
+  if (!$get_single_file) {
+    // If we won't specify file name in the query, it will result with list of
+    // all available files.
+    $file_name = '';
+  }
+
+  $uri  = 'http://' . $server->options['host'] . ':' . $server->options['port'] . $server->options['path'];
+  $uri .= '/' . SearchApiSolrConnection::FILE_SERVLET . '?contentType=text/xml;charset=utf-8&file=' . $file_name;
+
+  switch ($server->class) {
+    case 'search_api_solr_service':
+      // Search API Solr Service.
+      $service  = new SearchApiSolrService($server);
+
+      $response = $server->getFile($file_name);
+      break;
+
+    case 'acquia_search_service':
+      // Acquia Search Service.
+      $service = new SearchApiAcquiaSearchHttpTransport();
+
+      if ($server->options['http_method'] == 'GET') {
+        $response = $service->performGetRequest($uri);
+      }
+      else {
+        $response = $service->performPostRequest($uri);
+      }
+      break;
+
+    default:
+      drupal_set_message(t('Search API server class not supported (%class)!', array("%class" => $server->class)), 'error');
+      return;
+  }
+
+  return $response;
 }
