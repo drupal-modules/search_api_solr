@@ -13,29 +13,42 @@ function search_api_solr_solr_config_form($form, &$form_state, $server) {
 
   $form['title'] = array(
     '#prefix'  => '<h3>',
-    '#markup'  => t('List of files found on the Solr server:'),
+    '#markup'  => t('List of configuration files found:'),
     '#suffix'  => '</h3>',
   );
+
+  // Retrieving list of files available.
+  $files_list = search_api_solr_server_get_file($server->name);
+
+  if ($files_list === NULL) {
+    // An error occured.
+    $form['info'] = array(
+      '#markup' => t('An error occured while trying to load list of files.'),
+    );
+
+    return $form;
+  }
+  elseif (empty($files_list)) {
+    $form['info'] = array(
+      '#markup' => t('No files found.'),
+    );
+  }
 
   $form['files'] = array(
     '#type'  => 'vertical_tabs',
   );
 
-  // Retrieving list of files available.
-  $files_data = json_decode(search_api_solr_server_get_file($server->name)->data, TRUE);
-  $files_list = $files_data['files'];
-
   ksort($files_list);
-  
+
   // Generating fieldset for each file.
   foreach ($files_list as $file_name => $file_info) {
     $file_data = search_api_solr_server_get_file($server->name, $file_name);
-    
+
     if (!empty($file_info['directory'])) {
       // It's a directory, skipping.
       continue;
     }
-    
+
     $file_date = format_date(strtotime($file_info['modified']));
 
     $form['files'][$file_name] = array(
@@ -50,7 +63,7 @@ function search_api_solr_solr_config_form($form, &$form_state, $server) {
       // File is not empty.
       $form['files'][$file_name]['data'] = array(
         '#type'  => 'textarea',
-        '#value' => $file_data->data,
+        '#value' => $file_data,
         '#rows'  => '30',
       );
     }

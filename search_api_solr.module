@@ -117,50 +117,71 @@ function search_api_solr_search_api_server_update(SearchApiServer $server) {
  * @param string $server_name
  *   Name of the target SearchAPI server.
  * @param string $file_name
- *   Name of the file to retrieve or NULL for the list of files.
+ *   Name of the file to retrieve or empty string for the list of files.
  *
  * @return mixed
  *   Response object or NULL in case of error.
  */
-function search_api_solr_server_get_file($server_name, $file_name = NULL) {
+function search_api_solr_server_get_file($server_name, $file_name = '') {
 
   $server = search_api_server_load($server_name);
-
-  $get_single_file = $file_name !== NULL;
-
-  if (!$get_single_file) {
-    // If we won't specify file name in the query, it will result with list of
-    // all available files.
-    $file_name = '';
-  }
 
   $uri  = 'http://' . $server->options['host'] . ':' . $server->options['port'] . $server->options['path'];
   $uri .= '/' . SearchApiSolrConnection::FILE_SERVLET . '?contentType=text/xml;charset=utf-8&file=' . $file_name;
 
-  switch ($server->class) {
-    case 'search_api_solr_service':
-      // Search API Solr Service.
-      $service  = new SearchApiSolrService($server);
+  try {
+    switch ($server->class) {
+      case 'search_api_solr_service':
+        // Search API Solr Service.
+        $service  = new SearchApiSolrService($server);
 
-      $response = $server->getFile($file_name);
-      break;
+        $response = $server->getFile($file_name);
+        break;
 
-    case 'acquia_search_service':
-      // Acquia Search Service.
-      $service = new SearchApiAcquiaSearchHttpTransport();
+      case 'acquia_search_service':
+        // Acquia Search Service.
+        $service = new SearchApiAcquiaSearchHttpTransport();
 
-      if ($server->options['http_method'] == 'GET') {
-        $response = $service->performGetRequest($uri);
-      }
-      else {
-        $response = $service->performPostRequest($uri);
-      }
-      break;
+        if ($server->options['http_method'] == 'GET') {
+          $response = $service->performGetRequest($uri);
+        }
+        else {
+          $response = $service->performPostRequest($uri);
+        }
+        break;
 
-    default:
-      drupal_set_message(t('Search API server class not supported (%class)!', array("%class" => $server->class)), 'error');
-      return;
+      default:
+        drupal_set_message(t('Search API server class not supported (%class)!', array("%class" => $server->class)), 'error');
+        return;
+    }
+  }
+  catch (SearchAPIException $e) {
+    // An error occured.
+    drupal_set_message($e->getMessage(), 'error');
+    return NULL;
   }
 
-  return $response;
+  $get_single_file = empty($response->files);
+
+  if ($get_single_file) {
+    return $response->data;
+  }
+  else {
+    // Searching for directories and recursively merging directory files.
+    $files_data = json_decode($response->data, TRUE);
+    $files_list = $files_data['files'];
+    $result     = $files_list;
+
+    foreach ($files_list as $files_list_file_name => $files_list_file_info) {
+      if (!empty($files_list_file_info['directory'])) {
+        unset($files_list[$files_list_file_name]);
+        // Searching for directories and recursively merging directory files.
+        $folder_files_list = search_api_solr_server_get_file($server->name, $files_list_file_name);
+
+        $result = array_merge($result, $folder_files_list);
+      }
+    }
+
+    return $result;
+  }
 }
