@@ -9,8 +9,6 @@
  * Generates form to show Solr config files.
  */
 function search_api_solr_solr_config_form($form, &$form_state, $server) {
-  define('ACQUIA_DEVELOPMENT_NOSSL', TRUE);
-
   $form['title'] = array(
     '#prefix'  => '<h3>',
     '#markup'  => t('List of configuration files found:'),
@@ -18,7 +16,7 @@ function search_api_solr_solr_config_form($form, &$form_state, $server) {
   );
 
   // Retrieving list of files available.
-  $files_list = search_api_solr_server_get_file($server->name);
+  $files_list = search_api_solr_server_get_file($server->machine_name);
 
   if ($files_list === NULL) {
     // An error occured.
@@ -42,7 +40,7 @@ function search_api_solr_solr_config_form($form, &$form_state, $server) {
 
   // Generating fieldset for each file.
   foreach ($files_list as $file_name => $file_info) {
-    $file_data = search_api_solr_server_get_file($server->name, $file_name);
+    $file_data = search_api_solr_server_get_file($server->machine_name, $file_name);
 
     if (!empty($file_info['directory'])) {
       // It's a directory, skipping.

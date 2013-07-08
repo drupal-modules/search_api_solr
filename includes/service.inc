@@ -1967,7 +1967,10 @@ class SearchApiSolrService extends SearchApiAbstractService {
    */
   public function getFile($name = '') {
     $this->connect();
-    return $this->solr->makeServletRequest(SearchApiSolrConnection::FILE_SERVLET, array(
+
+    $file_servlet_name = constant($this->connection_class . '::FILE_SERVLET');
+
+    return $this->solr->makeServletRequest($file_servlet_name, array(
       'contentType' => 'text/xml;charset=utf-8',
       'file' => $name,
     ));
