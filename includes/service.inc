@@ -636,9 +636,10 @@ class SearchApiSolrService extends SearchApiAbstractService {
       // The fields to look for similarities in.
       $mlt_fl = array();
       foreach($mlt['fields'] as $f) {
-        // Solr 4 has a bug which results in numeric and date fields not being
-        // supported in MLT queries.
-        if ($version == 4 && in_array($fields[$f][0], array('i', 'f', 'd'))) {
+        // Solr 4 has a bug which results in numeric fields not being supported
+        // in MLT queries.
+        // Date fields don't seem to be supported at all.
+        if ($fields[$f][0] === 'd' || ($version == 4 && in_array($fields[$f][0], array('i', 'f')))) {
           continue;
         }
         $mlt_fl[] = $fields[$f];
@@ -899,6 +900,10 @@ class SearchApiSolrService extends SearchApiAbstractService {
     // Set up the results array.
     $results = array();
     $results['results'] = array();
+    // Keep a copy of the response in the results so it's possible to extract
+    // further useful information out of it, if necessary.
+    $results['search_api_solr_response'] = $response;
+
     // In some rare cases (e.g., MLT query with nonexistent ID) the response
     // will be NULL.
     if (!isset($response->response) && !isset($response->grouped)) {
