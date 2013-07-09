@@ -1958,4 +1958,22 @@ class SearchApiSolrService extends SearchApiAbstractService {
     return $this->solr->getFields($num_terms);
   }
 
+  /**
+   * Retrieves Solr server file.
+   *
+   * Uses the admin/ping request handler.
+   *
+   * @param $name
+   */
+  public function getFile($name = '') {
+    $this->connect();
+
+    $file_servlet_name = constant($this->connection_class . '::FILE_SERVLET');
+
+    return $this->solr->makeServletRequest($file_servlet_name, array(
+      'contentType' => 'text/xml;charset=utf-8',
+      'file' => $name,
+    ));
+  }
+
 }

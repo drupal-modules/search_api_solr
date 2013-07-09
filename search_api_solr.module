@@ -6,6 +6,25 @@
  */
 
 /**
+ * Implements hook_menu().
+ */
+function search_api_solr_menu() {
+  return array(
+    'admin/config/search/search_api/server/%search_api_server/files' => array(
+      'title' => 'Files',
+      'description' => 'View server solr configuration files.',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('search_api_solr_solr_config_form', 5),
+      'access callback' => array('search_api_access_server_files'),
+      'access arguments' => array(5),
+      'file' => 'search_api_solr.admin.inc',
+      'type' => MENU_LOCAL_TASK,
+      'weight' => -1,
+    ),
+  );
+}
+
+/**
  * Implements hook_search_api_service_info().
  */
 function search_api_solr_search_api_service_info() {
@@ -91,4 +110,79 @@ function search_api_solr_search_api_server_update(SearchApiServer $server) {
   if ($server->class === 'search_api_solr_service') {
     $server->getSolrConnection()->clearCache();
   }
+}
+
+/**
+ * Retrieves content of the file when name has been specified or list of files.
+ *
+ * @param string $server_name
+ *   Name of the target SearchAPI server.
+ * @param string $file_name
+ *   Name of the file to retrieve or empty string for the list of files.
+ *
+ * @return mixed
+ *   Response object or NULL in case of error.
+ */
+function search_api_solr_server_get_file($server_name, $file_name = '') {
+
+  $server = search_api_server_load($server_name);
+
+  $uri  = 'http://' . $server->options['host'] . ':' . $server->options['port'] . $server->options['path'];
+  $uri .= '/' . SearchApiSolrConnection::FILE_SERVLET . '?contentType=text/xml;charset=utf-8&file=' . $file_name;
+
+  try {
+    $response = $server->getFile($file_name);
+  }
+  catch (SearchAPIException $e) {
+    // An error occured.
+    drupal_set_message($e->getMessage(), 'error');
+    return NULL;
+  }
+
+  $get_single_file = empty($response->files);
+
+  if ($get_single_file) {
+    return $response->data;
+  }
+  else {
+    // Searching for directories and recursively merging directory files.
+    $files_data = json_decode($response->data, TRUE);
+    $files_list = $files_data['files'];
+    $result     = $files_list;
+
+    foreach ($files_list as $files_list_file_name => $files_list_file_info) {
+      if (!empty($files_list_file_info['directory'])) {
+        unset($files_list[$files_list_file_name]);
+        // Searching for directories and recursively merging directory files.
+        $folder_files_list = search_api_solr_server_get_file($server->machine_name, $files_list_file_name);
+
+        $result = array_merge($result, $folder_files_list);
+      }
+    }
+
+    return $result;
+  }
+}
+
+/**
+ * Access callback for server "files" tab.
+ *
+ * @param SearchApiServer $server
+ *   SearchApiServer object
+ */
+function search_api_access_server_files($server) {
+  $service_info = search_api_get_service_info($server->class);
+  $service_class = $service_info['class'];
+
+  if (empty($service_class) || !class_exists($service_class)) {
+    // Service class not found.
+    return FALSE;
+  }
+
+  if ($service_class == 'SearchApiSolrService' || in_array('SearchApiSolrService', class_parents($service_class))) {
+    // It's an SearchApiSolrService based connection class.
+    return TRUE;
+  }
+
+  return FALSE;
 }
